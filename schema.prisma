@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")  // Required for Supabase migrations
+}
+
+model Course {
+  id          Int      @id @default(autoincrement())
+  slug        String   @unique
+  title       String
+  description String
+  price       Float
+  image       String?  // thumbnail/cover URL
+  introVideoUrl String? // preview/intro video URL
+  category    String?  // e.g. "Programming"
+  level       String?  // Beginner/Intermediate/Advanced
+  language    String?  // ar/en
+  instructorName String?
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sections    Section[]
+  lessons     Lesson[]
+  activationCodes ActivationCode[]
+  enrollments Enrollment[]
+  orders      Order[]
+
+  @@map("courses")
+}
+
+model Section {
+  id        Int      @id @default(autoincrement())
+  courseId  Int
+  title     String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course  Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@index([courseId])
+  @@map("sections")
+}
+
+model Lesson {
+  id        Int      @id @default(autoincrement())
+  courseId  Int
+  sectionId Int?
+  title     String
+  videoUrl  String?
+  durationSec Int?   // optional
+  order     Int      @default(0)
+  isFreePreview Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course  Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  section Section? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+
+  @@index([courseId])
+  @@index([sectionId])
+  @@map("lessons")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  // ملاحظة: نظام المصادقة (Auth) سنضيفه لاحقاً. حالياً نحتفظ بهيكل المستخدم فقط.
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  enrollments Enrollment[]
+  orders      Order[]
+  usedActivationCodes ActivationCode[] @relation("ActivationCodeUsedBy")
+
+  @@map("users")
+}
+
+model Enrollment {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  courseId  Int
+  purchasedAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([courseId])
+  @@map("enrollments")
+}
+
+model Order {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  courseId  Int
+  amount    Float
+  currency  String   @default("IQD")
+  status    String   @default("pending") // pending | paid | failed | canceled
+  provider  String?  // stripe | myfatoorah | tap | paymob ...
+  providerRef String? // sessionId / invoiceId ...
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([courseId])
+  @@map("orders")
+}
+
+model ActivationCode {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  courseId  Int
+  isUsed    Boolean  @default(false)
+  usedByUserId Int?
+  usedAt    DateTime?
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  usedByUser User? @relation("ActivationCodeUsedBy", fields: [usedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([courseId])
+  @@index([usedByUserId])
+  @@map("activation_codes")
+}
